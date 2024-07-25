@@ -55,7 +55,7 @@ pipeline {
                 script {
                     sh '''
                         aws ec2 describe-instances --filters "Name=tag:Name,Values=CIInstance,AppInstance" --query 'Reservations[].Instances[].[InstanceId]' --output text | while read instance_id; do
-                            ssh -o StrictHostKeyChecking=no ec2-user@$(aws ec2 describe-instances --instance-ids $instance_id --query 'Reservations[].Instances[].PublicIpAddress' --output text) "docker run -d -p 8080:8080 your-docker-image:latest"
+                            ssh -o StrictHostKeyChecking=no ec2-user@$(aws ec2 describe-instances --instance-ids $instance_id --query 'Reservations[].Instances[].PublicIpAddress' --output text) "docker run -d -p 8081:8081 springboot:latest"
                         done
                     '''
                 }
