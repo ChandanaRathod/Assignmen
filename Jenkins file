@@ -1,0 +1,65 @@
+pipeline {
+    agent any
+    tools {
+        gradle 'gradle'
+    }
+    environment {
+        registry = "chndana/petclinic7"
+        registryCredential = "DOCK_CRED"
+        dockerImage = ''
+    }
+    
+    stages {
+        stage('git clone') {
+            steps {
+                checkout scmGit(branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/hvk2123/chintoo.git']])
+            }
+        }
+        stage('UNIT Testing') {
+            steps {
+                sh './gradlew clean install'
+            }
+        }
+        stage('Archive') {
+            steps {
+                archiveArtifacts artifacts: '*/build/libs/.jar', fingerprint: true
+            }
+        }
+        stage('Upload to S3') {
+            steps {
+                script {
+                    def s3Upload = "aws s3 cp build/libs/*.jar s3://Ec2artifact/"
+                    sh s3Upload
+                }
+            }
+        }
+        stage('Build app') {
+            steps {
+                script{
+                    dockerImage = docker.build registry + ":$BUILD_NUMBER"
+                }
+            }
+        }
+        
+        stage('Deploy Image') {
+            steps{
+                script {
+                    docker.withRegistry( '', registryCredential ) {
+                        dockerImage.push()
+                    }
+                }
+            }
+        }
+        stage('Deploy to EC2') {
+            steps {
+                script {
+                    sh '''
+                        aws ec2 describe-instances --filters "Name=tag:Name,Values=CIInstance,AppInstance" --query 'Reservations[].Instances[].[InstanceId]' --output text | while read instance_id; do
+                            ssh -o StrictHostKeyChecking=no ec2-user@$(aws ec2 describe-instances --instance-ids $instance_id --query 'Reservations[].Instances[].PublicIpAddress' --output text) "docker run -d -p 8080:8080 your-docker-image:latest"
+                        done
+                    '''
+                }
+            }
+        }
+    }
+}
